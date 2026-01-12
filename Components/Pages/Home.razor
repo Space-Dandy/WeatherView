@@ -1,0 +1,169 @@
+﻿@page "/"
+@using WeatherView.Models
+@inject WeatherView.Services.WeatherService WeatherService
+@inject IJSRuntime JSRuntime
+@rendermode InteractiveServer
+
+<PageTitle>Dashboard</PageTitle>
+
+<div class="container px-4 py-8">
+  <h1 class="text-6xl font-cookie">¡Bienvenidos a WeatherView!</h1>
+
+  @if(isLoading)
+  {
+    <div class="backdrop-blur-lg bg-white/30 rounded-3xl shadow-2xl p-8 border border-white/20">
+      <div class="text-center">
+        <i class="fas fa-spinner fa-spin text-4xl text-gray-700 mb-4"></i> 
+        <h2 class="text-2xl font-bold text-gray-800">Cargando información del clima...</h2>
+      </div>
+    </div>
+  } else if(errorMessage != null) 
+  {
+      <div class="backdrop-blur-lg bg-red-500/30 rounded-3xl shadow-2xl p-8 border border-red-300/20">
+        <div class="text-center">
+          <i class="fas fa-exclamation-triangle text-4xl text-red-700 mb-4"></i>
+          <p class="font-bold text-red-800 mb-2">Error</p>
+          <p class="text-red-700 mb-4">@errorMessage</p>
+          <button @onclick="LoadWeather" 
+                  class="bg-red-500/50 hover:bg-red-600/50 text-white font-bold py-2 px-6 rounded-xl transition-all">
+            <i class="fas fa-redo mr-2"></i> Intentar de Nuevo
+          </button>
+        </div>
+      </div>}
+   else if(weather != null && weather.current_weather != null) 
+  {
+     <div class="backdrop-blur-lg bg-white/30 rounded-3xl shadow-2xl p-8 border border-white/20 hover:bg-white/40 transition-all duration-300">
+        <div class="text-center mb-6">
+          <i class="fas fa-cloud-sun text-6xl text-yellow-500 mb-4"></i>
+          <h2 class="text 2xl font-bold text-gray-800">> Clima Actual</h2>
+          <p class="text-sm text-gray-600">America/Denver</p>
+        </div>
+        <div class="text-center mb-8 py-6 bg-transparent rounded-2xl ">
+          <div class="text-7xl font-bold text-gray-800">
+            @weather.current_weather.temperature<span class="text-4xl">°C</span>
+          </div>
+        </div>
+        <div class="space-y-4">
+
+          <div class="flex items-center justify-between p-4">
+            <div class="flex items-center gap-3">
+              <i class="fas fa-wind text-2xl text-blue-500"></i>
+              <div class="text-gray-700 font-medium">Velocidad del Viento</div>
+            </div>
+            <span class="text-gray-800 font-bold">@weather.current_weather.windspeed</span>
+          </div>
+
+          <div class="flex items-center justify-between p-4">
+            <div class="flex items-center gap-3">
+              <i class="fas fa-compass text-2xl text-green-500"></i>
+              <div class="text-gray-700 font-medium">Dirección del Viento</div>
+            </div>
+            <span class="text-gray-800 font-bold">@weather.current_weather.winddirection</span>
+          </div>
+
+          <div class="flex items-center justify-between p-4">
+            <div class="flex items-center gap-3">
+              <i class="fas fa-cloud text-2xl text-gray-500"></i>
+              <div class="text-gray-700 font-medium">Código del Cielo</div>
+            </div>
+            <span class="text-gray-800 font-bold">@weather.current_weather.weathercode</span>
+          </div>
+          <div class="flex items-center justify-center p-4 min-w-screens">
+            <button @onclick="LoadWeather" class="w-full mt-6 bg-white/30 hover:bg-white/50 backdrop-blur-sm text-gray-800 font-bold py-3 px-6 rounded-xl border border-white/20 transition-all duration-300 hover:shadow-lg">
+              <i class="fas fa-sync-alt mr-2"></i> Actualizar
+            </button>
+          </div>
+        </div>
+      </div>
+  } else 
+  {
+    <p class="text-lg mt-4 text-red-500">No se pudo cargar la información del clima.</p>
+    
+  }
+</div>
+
+
+@code {
+  private WeatherResponse? weather;
+  private bool isLoading = true;
+  private string? errorMessage;
+  private string? userTimeZone;
+  private string currentLocation = "";
+  private string loadingMessage = "Obteniendo ubicación...";
+  private double? locationAccuracy;
+
+  protected override async Task OnInitializedAsync()  
+  {
+    await LoadWeather();
+  }
+
+  private async Task LoadWeather() 
+  {
+    isLoading = true;
+    errorMessage = null;
+    loadingMessage = "Esperando permiso de tu ubicación...";
+    try 
+    {
+      userTimeZone = await JSRuntime.InvokeAsync<string>("geolocationHelper.getTimezone");
+      GeolocationData? location = null;
+
+      try 
+      {
+        
+        loadingMessage = "Intentando geolocalización del navegador";
+        var locationTask = JSRuntime.InvokeAsync<GeolocationData>("geolocationHelper.getCurrentPosition");
+        var timeoutTask = Task.Delay(5000); 
+
+        var completedTask = await Task.WhenAny(locationTask.AsTask(), timeoutTask);
+        if (completedTask == timeoutTask) 
+        {
+          throw new Exception("La solicitud de ubicación ha expirado. Por favor, intenta de nuevo.");
+        }
+
+        location = await locationTask;
+        currentLocation = "Tu ubicación (GPS)";
+        locationAccuracy = location.Accuracy;
+        loadingMessage = "Cargando datos del clima...";
+      } catch (Exception ex) 
+      {
+        Console.WriteLine("Error al obtener la ubicación del navegador: " + ex.Message);
+        loadingMessage = "Detectando ubicación por IP...";
+        location = await WeatherService.GetLocationFromIpAsync();
+
+        if(location != null) 
+        {
+          currentLocation = "Tu ubicación (IP)";
+          locationAccuracy = location.Accuracy;
+          loadingMessage = "Cargando datos del clima...";
+        } else 
+        {
+          loadingMessage = "Utilizando ubicación predeterminada (Denver, CO)";
+          location = new GeolocationData 
+          {
+            Latitude = 24.8091,
+            Longitude = -107.3940,
+            Accuracy = 50000 
+          };
+          currentLocation = "Culiacán, Sinaloa (Predeterminada)";
+        }
+      }
+
+      loadingMessage = "Cargando datos del clima...";
+      weather = await WeatherService.GetWeatherAsync(location.Latitude, location.Longitude, userTimeZone ?? "America/Denver");
+      if (weather == null) 
+      {
+        errorMessage = "No se pudo obtener la información del clima.";
+      }
+      
+    } catch (JSException jsEx) 
+    {
+      errorMessage = "Error al obtener la ubicación: " + jsEx.Message;
+    } catch (Exception ex) 
+    {
+      errorMessage = "Error al cargar el clima: " + ex.Message;
+    } finally 
+    {
+      isLoading = false;
+    }
+  }
+}

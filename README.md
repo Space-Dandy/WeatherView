@@ -125,5 +125,5 @@ MIT License - feel free to use this project however you'd like!
 ---
 
 <div align="center">
-  <sub>Built with 🌤️ by <a href="https://github.com/YOUR_USERNAME">Your Name</a></sub>
+  <sub>Built with 🌤️ by <a href="https://github.com/Space-Dandy">Your Name</a></sub>
 </div>
